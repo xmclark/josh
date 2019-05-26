@@ -13,6 +13,16 @@ fn sorted(mut v: Vec<String>) -> Vec<String> {
     v
 }
 
+pub fn apply_view(repo: &Repository, view: &dyn View, newrev: Oid) -> Option<Oid> {
+    return Some(apply_view_cached(
+        &repo,
+        view,
+        newrev,
+        &mut ViewMaps::new(),
+        &mut ViewMap::new(),
+    ));
+}
+
 const TMP_NAME: &'static str = "refs/centralgit/tmp_fd2db5f8_bac2_4a1e_9487_4ac3414788aa";
 
 // force push of the new revision-object to temp repo
@@ -132,7 +142,7 @@ fn test_split_subdir_one_commit() {
 
     assert_eq!(
         split_subdir_ref(&repo, "foo", head.id()),
-        scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id())
+        apply_view(&scratch, &*views::build_view("!/foo"), head.id())
     );
 }
 
@@ -149,7 +159,7 @@ fn test_split_subdir_two_commits() {
 
     assert_eq!(
         split_subdir_ref(&repo, "foo", head.id()),
-        scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id())
+        apply_view(&scratch, &*views::build_view("!/foo"), head.id())
     );
 }
 
@@ -165,7 +175,7 @@ fn test_split_subdir_does_not_exist() {
     // let head = transfer(&scratch, &repo.commit("1"), &repo.repo.path());
 
     // assert_eq!(split_subdir_ref(&repo, "bar", head.id()),
-    //            scratch::apply_view(&scratch, "bar", head.id()));
+    //            apply_view(&scratch, "bar", head.id()));
 }
 
 #[test]
@@ -181,7 +191,7 @@ fn test_split_subdir_two_commits_first_empty() {
 
     assert_eq!(
         split_subdir_ref(&repo, "foo", head.id()),
-        scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id())
+        apply_view(&scratch, &*views::build_view("!/foo"), head.id())
     );
     // assert!(false);
 }
@@ -201,7 +211,7 @@ fn test_split_subdir_three_commits_middle_unrelated() {
 
     assert_eq!(
         split_subdir_ref(&repo, "foo", head.id()),
-        scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id())
+        apply_view(&scratch, &*views::build_view("!/foo"), head.id())
     );
 }
 
@@ -220,7 +230,7 @@ fn test_split_subdir_three_commits_first_unrelated() {
 
     assert_eq!(
         split_subdir_ref(&repo, "foo", head.id()),
-        scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id())
+        apply_view(&scratch, &*views::build_view("!/foo"), head.id())
     );
 }
 
@@ -267,7 +277,7 @@ fn test_split_merge_identical_to_second() {
     println!("{:?}", repo.shell.command("git log"));
     let head = transfer(&scratch, &repo.rev("HEAD"), &repo.repo.path());
 
-    let actual = scratch::apply_view(&scratch, &*views::build_view("!/foo"), head.id());
+    let actual = apply_view(&scratch, &*views::build_view("!/foo"), head.id());
 
     let shell = Shell {
         cwd: scratch.path().to_path_buf(),

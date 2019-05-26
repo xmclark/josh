@@ -431,7 +431,7 @@ fn make_view_repo(
         );
     }
 
-    let mut fm = forward_maps
+    let mut forward_map = forward_maps
         .entry(viewobj.viewstr())
         .or_insert_with(ViewMap::new);
 
@@ -446,7 +446,10 @@ fn make_view_repo(
             continue;
         });
 
-        if let Some(n) = fm.get(&target) {
+        if let Some(n) = forward_map.get(&target) {
+            if *n == git2::Oid::zero() {
+                continue;
+            }
             ok_or!(
                 scratch.reference(
                     &format!("refs/namespaces/{}/refs/tags/{}", &namespace, &tag),

@@ -52,8 +52,8 @@ fn default_apply_to_tree_and_parents(
     let (tree, parents) = tree_and_parents;
     let mut transformed_parents_ids = vec![];
     for parent in parents {
-        if let Some(p) = apply_view_cached(repo, viewobj, parent, forward_maps, &mut ViewMap::new())
-        {
+        let p = apply_view_cached(repo, viewobj, parent, forward_maps, &mut ViewMap::new());
+        if p != Oid::zero() {
             transformed_parents_ids.push(p);
         }
     }
@@ -345,9 +345,8 @@ impl View for WorkspaceView {
 
         let mut transformed_parents_ids = vec![];
         for parent in parents.iter() {
-            if let Some(p) =
-                apply_view_cached(repo, self, *parent, forward_maps, &mut ViewMap::new())
-            {
+            let p = apply_view_cached(repo, self, *parent, forward_maps, &mut ViewMap::new());
+            if p != Oid::zero() {
                 transformed_parents_ids.push(p);
             }
 
@@ -372,9 +371,8 @@ impl View for WorkspaceView {
         let pcw: Box<dyn View> = build_combine_view(&s, Box::new(EmptyView));
 
         for parent in parents {
-            if let Some(p) =
-                apply_view_cached(repo, &*pcw, parent, forward_maps, &mut ViewMap::new())
-            {
+            let p = apply_view_cached(repo, &*pcw, parent, forward_maps, &mut ViewMap::new());
+            if p != Oid::zero() {
                 transformed_parents_ids.push(p);
             }
             break;

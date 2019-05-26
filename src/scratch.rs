@@ -154,9 +154,8 @@ fn transform_commit(
     if let Ok(reference) = repo.find_reference(&from_refsname) {
         let r = reference.target().expect("no ref");
 
-        if let Some(view_commit) =
-            apply_view_cached(&repo, &*viewobj, r, forward_maps, backward_map)
-        {
+        let view_commit = apply_view_cached(&repo, &*viewobj, r, forward_maps, backward_map);
+        if view_commit != git2::Oid::zero() {
             repo.reference(&to_refname, view_commit, true, "apply_view")
                 .expect("can't create reference");
         }
@@ -221,29 +220,19 @@ pub fn apply_view_to_branch(
     }
 }
 
-pub fn apply_view(repo: &Repository, view: &dyn View, newrev: Oid) -> Option<Oid> {
-    return apply_view_cached(
-        &repo,
-        view,
-        newrev,
-        &mut ViewMaps::new(),
-        &mut ViewMap::new(),
-    );
-}
-
 pub fn apply_view_cached(
     repo: &Repository,
     view: &dyn View,
     newrev: Oid,
     forward_maps: &mut ViewMaps,
     backward_map: &mut ViewMap,
-) -> Option<Oid> {
+) -> Oid {
     {
         let mut forward_map = forward_maps
             .entry(view.viewstr())
             .or_insert_with(ViewMap::new);
         if let Some(id) = forward_map.get(&newrev) {
-            return Some(*id);
+            return *id;
         }
     }
     let tname = format!("apply_view_cached {:?}", newrev);
@@ -284,8 +273,9 @@ pub fn apply_view_cached(
 
         let mut transformed_parents = vec![];
         for parent_id in transformed_parents_ids {
-            let parent = repo.find_commit(parent_id).unwrap();
-            transformed_parents.push(parent);
+            if let Ok(parent) = repo.find_commit(parent_id) {
+                transformed_parents.push(parent);
+            }
         }
 
         let transformed_parent_refs: Vec<&_> = transformed_parents.iter().collect();
@@ -322,7 +312,6 @@ pub fn apply_view_cached(
                 .or_insert_with(ViewMap::new);
             forward_map.insert(commit.id(), transformed);
         }
-        debug!("backward_map.insert ({},{})", view.viewstr(), transformed);
         backward_map.insert(transformed, commit.id());
         out_commit_count += 1;
     }
@@ -336,5 +325,11 @@ pub fn apply_view_cached(
     let mut forward_map = forward_maps
         .entry(view.viewstr())
         .or_insert_with(ViewMap::new);
-    return forward_map.get(&newrev).cloned();
+
+    if let Some(id) = forward_map.get(&newrev).cloned() {
+        return id;
+    } else {
+        forward_map.insert(newrev, Oid::zero());
+        return Oid::zero();
+    }
 }
