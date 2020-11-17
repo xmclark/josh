@@ -976,11 +976,21 @@ impl Filter for CombineView {
     ) -> git2::Oid {
         let mut base_wo = tree.id();
 
+        let parent_filtered = repo
+            .find_tree(self.base.apply_to_tree(
+                &repo,
+                &parent_tree,
+                git2::Oid::zero(),
+            ))
+            .unwrap();
+
         for prefix in self.prefixes.iter() {
             base_wo = replace_subtree(
                 repo,
                 prefix,
-                empty_tree_id(),
+                ok_or!(parent_filtered.get_path(&prefix).map(|x| x.id()), {
+                    empty_tree_id()
+                }),
                 &repo.find_tree(base_wo).unwrap(),
             );
         }
