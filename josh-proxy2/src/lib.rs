@@ -164,11 +164,13 @@ fn push_head_url(
     let shell = josh::shell::Shell {
         cwd: repo.path().to_owned(),
     };
-    let nurl = {
+    let nurl = if username != "" {
         let splitted: Vec<&str> = url.splitn(2, "://").collect();
         let proto = splitted[0];
         let rest = splitted[1];
         format!("{}://{}@{}", &proto, &username, &rest)
+    } else {
+        url.to_owned()
     };
     let cmd = format!("git push {} '{}'", &nurl, &spec);
     let mut fakehead = repo.reference(&rn, oid, true, "push_head_url")?;
@@ -197,8 +199,8 @@ pub fn create_repo(path: &std::path::Path) -> josh::JoshResult<()> {
     std::os::unix::fs::symlink(ce, path.join("hooks").join("update"))
         .expect("can't symlink update hook");
     shell.command(&format!(
-                "git config credential.helper '!f() {{ echo \"password=\"$GIT_PASSWORD\"\"; }}; f'"
-                ));
+        "git config credential.helper '!f() {{ echo \"password=\"$GIT_PASSWORD\"\"; }}; f'"
+    ));
     shell.command(&"git config gc.auto 0");
 
     if std::env::var_os("JOSH_KEEP_NS") == None {
@@ -214,7 +216,7 @@ pub fn fetch_refs_from_url(
     url: &str,
     refs_prefixes: &[&str],
     username: &str,
-    password: &str,
+    password: &Password,
 ) -> Result<(), git2::Error> {
     let specs: Vec<_> = refs_prefixes
         .iter()
@@ -242,7 +244,7 @@ pub fn fetch_refs_from_url(
     tracing::info!("fetch_refs_from_url {:?} {:?} {:?}", cmd, path, "");
 
     let (_stdout, stderr) =
-        shell.command_env(&cmd, &[("GIT_PASSWORD", &password)]);
+        shell.command_env(&cmd, &[("GIT_PASSWORD", &password.value)]);
     tracing::debug!(
         "fetch_refs_from_url done {:?} {:?} {:?}",
         cmd,
@@ -259,6 +261,21 @@ pub fn fetch_refs_from_url(
         return Err(git2::Error::from_str("error"));
     }
     return Ok(());
+}
+
+// Wrapper struct for storing passwords to avoid having
+// them output to traces by accident
+#[derive(Clone)]
+pub struct Password {
+    pub value: String,
+}
+
+impl std::fmt::Debug for Password {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Password")
+            .field("value", &"<hidden>")
+            .finish()
+    }
 }
 
 pub struct TmpGitNamespace {
@@ -279,6 +296,15 @@ impl TmpGitNamespace {
     }
     pub fn reference(&self, refname: &str) -> String {
         return format!("refs/namespaces/{}/{}", &self.name, refname);
+    }
+}
+
+impl std::fmt::Debug for TmpGitNamespace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JoshProxyService")
+            .field("repo_path", &self.repo_path)
+            .field("name", &self.name)
+            .finish()
     }
 }
 

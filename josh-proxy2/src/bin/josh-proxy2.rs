@@ -9,6 +9,7 @@ use hyper::{Request, Response, Server};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::process::Command;
+use tracing_futures::Instrument;
 
 fn version_str() -> String {
     format!(
@@ -41,9 +42,18 @@ struct JoshProxyService {
     fetching: Arc<RwLock<std::collections::HashSet<String>>>,
 }
 
+impl std::fmt::Debug for JoshProxyService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JoshProxyService")
+            .field("repo_path", &self.repo_path)
+            .field("upstream_url", &self.upstream_url)
+            .finish()
+    }
+}
+
 pub fn parse_auth(
     req: &hyper::Request<hyper::Body>,
-) -> Option<(String, String)> {
+) -> Option<(String, josh_proxy2::Password)> {
     let line = josh::some_or!(
         req.headers()
             .get("authorization")
@@ -64,7 +74,12 @@ pub fn parse_auth(
     if let [username, password] =
         s.as_str().split(':').collect::<Vec<_>>().as_slice()
     {
-        return Some((username.to_string(), password.to_string()));
+        return Some((
+            username.to_string(),
+            josh_proxy2::Password {
+                value: password.to_string(),
+            },
+        ));
     }
     return None;
 }
@@ -76,16 +91,17 @@ fn hash_strings(url: &str, username: &str, password: &str) -> String {
     d.result_str().to_owned()
 }
 
+#[tracing::instrument]
 async fn fetch_upstream(
     service: Arc<JoshProxyService>,
     upstream_repo: String,
     username: &str,
-    password: &str,
+    password: josh_proxy2::Password,
     remote_url: String,
 ) -> bool {
     let username = username.to_owned();
-    let password = password.to_owned();
-    let credentials_hashed = hash_strings(&remote_url, &username, &password);
+    let credentials_hashed =
+        hash_strings(&remote_url, &username, &password.value);
 
     tracing::debug!(
         "credentials_hashed {:?}, {:?}, {:?}",
@@ -207,6 +223,7 @@ async fn static_paths(
     return None;
 }
 
+#[tracing::instrument]
 async fn repo_update_fn(
     serv: Arc<JoshProxyService>,
     req: Request<hyper::Body>,
@@ -239,6 +256,7 @@ async fn repo_update_fn(
     .unwrap();
 }
 
+#[tracing::instrument]
 async fn do_filter(
     repo_path: std::path::PathBuf,
     service: Arc<JoshProxyService>,
@@ -281,6 +299,7 @@ async fn do_filter(
     .unwrap();
 }
 
+/* #[tracing::instrument] */
 async fn call_service(
     serv: Arc<JoshProxyService>,
     req: Request<hyper::Body>,
@@ -308,7 +327,7 @@ async fn call_service(
     /* /1* } *1/ */
 
     let parsed_url = {
-        let nop_path = path.replacen(".git", ".git:nop=nop.git", 1);
+        let nop_path = path.replacen(".git", ".git:nop.git", 1);
         if let Some(parsed_url) = TransformedRepoUrl::from_str(&path) {
             parsed_url
         } else if let Some(parsed_url) = TransformedRepoUrl::from_str(&nop_path)
@@ -372,7 +391,7 @@ async fn call_service(
         serv.clone(),
         parsed_url.upstream_repo.clone(),
         &username,
-        &password,
+        password.clone(),
         br_url,
     )
     .await;
@@ -438,7 +457,7 @@ async fn call_service(
     cmd.env("GIT_NAMESPACE", ns.name().clone());
     cmd.env("GIT_PROJECT_ROOT", repo_path);
     cmd.env("JOSH_BASE_NS", base_ns);
-    cmd.env("JOSH_PASSWORD", password);
+    cmd.env("JOSH_PASSWORD", password.value);
     cmd.env("JOSH_PORT", port);
     cmd.env("JOSH_REMOTE", remote_url);
     cmd.env("JOSH_USERNAME", username);
@@ -489,7 +508,9 @@ async fn run_proxy() -> josh::JoshResult<i32> {
         let service = service_fn(move |_req| {
             let proxy_service = proxy_service.clone();
 
-            call_service(proxy_service, _req).map(Ok::<_, hyper::http::Error>)
+            call_service(proxy_service, _req)
+                .map(Ok::<_, hyper::http::Error>)
+                .instrument(tracing::info_span!("call_service"))
         });
 
         future::ok::<_, hyper::http::Error>(service)
@@ -630,5 +651,13 @@ fn main() {
         }
     }
 
+    tracing_subscriber::fmt::init();
+    /* let collector = tracing_subscriber::fmt() */
+    /*     .with_max_level(tracing::Level::TRACE) */
+    /*     .finish(); */
+
+    /* tracing::collector::with_default(collector, || { */
+    tracing::info!("This will be logged to stdout");
     std::process::exit(run_proxy().unwrap_or(1));
+    /* }); */
 }

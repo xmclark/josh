@@ -16,10 +16,12 @@ clap = "2"
 futures = "0.3"
 tokio = {version = "0.2", features = ["full"] }
 hyper = "0.13"
-hyper_cgi = "0.1"
+hyper_cgi = {version = "0.1"}
 toml = "*"
 git2 = {version = "*", default-features = false}
-tracing = "*"
+tracing = { version = "*", features = ["max_level_debug", "release_max_level_info"] }
+tracing-futures = "*"
+tracing-subscriber = "*"
 reqwest= {version = "0.10", default-features = false, features = ["blocking", "json"]}
 uuid = {version = "0.8", features = ["v4"]}
 base64 = "0.12"
