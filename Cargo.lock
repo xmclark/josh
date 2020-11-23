@@ -935,7 +935,7 @@ dependencies = [
  "base64 0.13.0",
  "bincode",
  "clap",
- "futures 0.1.30",
+ "futures 0.3.7",
  "futures-cpupool",
  "git2",
  "hyper 0.11.27",
